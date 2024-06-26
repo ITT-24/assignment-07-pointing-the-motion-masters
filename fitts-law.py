@@ -12,7 +12,8 @@ click_times = []
 angles = []
 start_time = None
 trial_index = 0
-num_trials = 14    #number of circles need to be clicked
+num_trials = 14
+    #number of circles need to be clicked
 num_targets = 12    #number of circles
 
 # Define target properties
