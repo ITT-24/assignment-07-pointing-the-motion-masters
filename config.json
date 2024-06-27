@@ -1,14 +1,14 @@
 {
-    "num_trials": 14,
-    "num_targets": 12,
-    "num_restarts": 2,
+    "num_trials": 10,
+    "num_targets": 9,
+    "num_restarts": 9,
     "window_width": 1440,
     "window_height": 960,
-    "target_radius_min": 10,
-    "target_radius_max": 50,
-    "central_radius_min": 200,
-    "central_radius_max": 400,
+    "radius": [10, 20, 30],
+    "distance": [100, 200, 300],
     "highlight_color": [0,139,0],
     "normal_color": [205,0,0],
-    "latency": 0.5 
+    "latency": 0.15,
+    "cursor_color": [255, 255, 255],
+    "cursor_size": 10
 }
