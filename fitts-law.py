@@ -8,7 +8,7 @@ import csv
 from collections import deque
 import os
 
-#command line parameters
+# Parse command line arguments using sys.argv
 if len(sys.argv) < 3:
     print("Usage: python script_name.py <participant_id> <input_device>")
     sys.exit(1)
@@ -16,61 +16,68 @@ if len(sys.argv) < 3:
 participant_id = sys.argv[1]
 input_device = sys.argv[2]
 
-#load config (.json)
+# Load configuration from file
 with open('config.json') as config_file:
     config = json.load(config_file)
 
-#check if input device is mouselatency
+# Determine if mouse latency should be applied
 apply_mouse_latency = input_device.lower() == "mouselatency"
 
 # pyglet window
 window = pyglet.window.Window(config['window_width'], config['window_height'])
 batch = pyglet.graphics.Batch()
 
-#check if it should hide or show cursor
+# Hide or show the system cursor based on input device
 if apply_mouse_latency:
     window.set_mouse_visible(False)
 else:
     window.set_mouse_visible(True)
 
-# variables
+# Variables
 targets = []
 click_times = []
 angles = []
 start_time = None
 trial_index = 0
-num_trials = config['num_trials'] 
-num_targets = config['num_targets'] 
-current_restart = 0  
+num_trials = config['num_trials']  # Number of trials in each run
+num_targets = config['num_targets']  # Number of circles
+num_restarts = config['num_restarts']  # Number of times the experiment should restart
+current_restart = 0  # Current restart count
+total_clicks = 0
+missed_clicks = 0
 
-#target properties from config
-radius = config['radius']  
-distance = config['distance'] 
+# Define target properties
+target_radii = config['radius']  # List of target radii
+central_radii = config['distance']  # List of central radii
 central_x = window.width // 2
 central_y = window.height // 2
-highlight_color = tuple(config['highlight_color'])  
-normal_color = tuple(config['normal_color'])       
-latency = config['latency'] if apply_mouse_latency else 0  #set latency if latency is required
-cursor_color = tuple(config['cursor_color'])  
-cursor_size = config['cursor_size'] 
+highlight_color = tuple(config['highlight_color'])  # Highlight color
+normal_color = tuple(config['normal_color'])        # Normal circle color
+latency = config['latency'] if apply_mouse_latency else 0  # Latency in seconds (only for mouse latency)
+cursor_color = tuple(config['cursor_color'])  # Cursor color
+cursor_size = config['cursor_size']  # Cursor size
 
-#csv
+# CSV file setup
 csv_filename = f"fittslaw_{participant_id}.csv"
 csv_exists = os.path.isfile(csv_filename)
+
+# Open the CSV file in append mode
 csv_file = open(csv_filename, mode='a', newline='')
 csv_writer = csv.writer(csv_file)
-if not csv_exists:
-    csv_writer.writerow(['Participant ID', 'Input Device', 'Round', 'Radius', 'Distance', 'Click Times'])
 
-#round label
-total_rounds = len(radius) * len(distance)
+# Write header if the file does not exist
+if not csv_exists:
+    csv_writer.writerow(['Participant ID', 'Input Device', 'Round', 'Radius', 'Distance', 'Total Clicks', 'Missed Clicks', 'Click Times'])
+
+# Label on top to display the number of rounds
+total_rounds = len(target_radii) * len(central_radii)
 label = pyglet.text.Label(f'Round 1 of {total_rounds}',
                           font_name='Times New Roman',
                           font_size=24,
                           x=window.width // 2, y=window.height - 30,
                           anchor_x='center', anchor_y='center')
 
-#circle positions in circle
+# Circle positions in circle shape
 def generate_targets(num_targets, central_radius, target_radius):
     global central_x, central_y, normal_color, batch
     targets = []
@@ -86,39 +93,39 @@ def generate_targets(num_targets, central_radius, target_radius):
 def create_targets(target_radius, central_radius):
     global targets, target_circles, angles, current_restart, trial_index
 
+    # Increment the restart count when starting a new round
     if trial_index == 0:
         current_restart += 1
 
-    print(f"Creating targets: target_radius={target_radius}, central_radius={central_radius}")
     targets = generate_targets(num_targets, central_radius, target_radius)
     target_circles = [t[0] for t in targets]
     angles = [t[1] for t in targets]
 
-#target and circles
+# Initialize target and circle setup
 current_radius_index = 0
 current_distance_index = 0
-current_radius = radius[current_radius_index]
-current_distance = distance[current_distance_index]
+current_radius = target_radii[current_radius_index]
+current_distance = central_radii[current_distance_index]
 create_targets(current_radius, current_distance)
 
-#first target
+# Highlight the first target
 current_target_index = 0
 target_circles[current_target_index].color = highlight_color
 
-#last target
+# Track the last clicked target indices
 last_clicked_index = None
 previous_index = None
 
-#latency
-mouse_position_queue = deque(maxlen=int(latency * 60)) 
+# Queue to simulate latency in mouse position
+mouse_position_queue = deque(maxlen=int(latency * 60))  # Assuming 60 FPS
 
 @window.event
 def on_mouse_motion(x, y, dx, dy):
     if apply_mouse_latency:
-        #latency mouse position
+        # Store the actual mouse position with latency
         mouse_position_queue.append((x, y))
     else:
-        #mouse position
+        # Directly use the current mouse position without latency
         process_mouse_motion(x, y)
 
 @window.event
@@ -129,10 +136,11 @@ def on_draw():
         label.draw()
         batch.draw()
 
-        #latency cursor
+        # Draw the delayed mouse cursor if latency is applied
         if apply_mouse_latency and mouse_position_queue:
             delayed_x, delayed_y = mouse_position_queue[0]
-            pyglet.shapes.Circle(delayed_x, delayed_y, cursor_size, color=cursor_color).draw() 
+            pyglet.shapes.Circle(delayed_x, delayed_y, cursor_size, color=cursor_color).draw()  # Custom cursor size and color
+        
     else:
         if current_restart < num_restarts:
             save_data_to_csv()
@@ -140,14 +148,15 @@ def on_draw():
             restart_experiment()
         else:
             save_data_to_csv()
-            #finish label
-            result_label = pyglet.text.Label('Finished',
+            # Display results after all trials and restarts
+            result_label = pyglet.text.Label('Experiment Complete',
                                              font_name='Times New Roman',
                                              font_size=24,
                                              x=window.width // 2, y=window.height // 2,
                                              anchor_x='center', anchor_y='center')
             result_label.draw()
-            csv_file.close()
+            csv_file.close()  # Close the CSV file
+
 
 @window.event
 def on_mouse_press(x, y, button, modifiers):
@@ -158,10 +167,12 @@ def on_mouse_press(x, y, button, modifiers):
         process_mouse_press(x, y, button, modifiers)
 
 def process_mouse_motion(x, y):
-    pass 
+    pass  # Implement any additional mouse motion processing if needed
 
 def process_mouse_press(x, y, button, modifiers):
-    global start_time, trial_index, current_target_index, last_clicked_index, previous_index
+    global start_time, trial_index, current_target_index, last_clicked_index, previous_index, total_clicks, missed_clicks
+
+    total_clicks += 1
 
     if trial_index < num_trials:
         target = target_circles[current_target_index]
@@ -173,7 +184,7 @@ def process_mouse_press(x, y, button, modifiers):
             previous_index = last_clicked_index
             last_clicked_index = current_target_index
 
-            #next target
+            # Next target
             if previous_index is None:
                 next_target_index = (current_target_index + num_targets // 2) % num_targets
             else:
@@ -181,33 +192,38 @@ def process_mouse_press(x, y, button, modifiers):
                 if next_target_index == last_clicked_index:
                     next_target_index = (next_target_index - 1) % num_targets
 
-            #color next target
+            # Set color next target
             target.color = normal_color
             current_target_index = next_target_index
             target_circles[current_target_index].color = highlight_color
             trial_index += 1
 
+            # Set start time
             start_time = time.time()
+        else:
+            missed_clicks += 1
+
 
 def save_data_to_csv():
-    global current_restart, current_radius, current_distance, click_times
+    global current_restart, current_radius, current_distance, click_times, total_clicks, missed_clicks
     if click_times:
-        csv_writer.writerow([participant_id, input_device, current_restart, current_radius, current_distance, click_times])
-        click_times = []  #reset
+        csv_writer.writerow([participant_id, input_device, current_restart, current_radius, current_distance, total_clicks, missed_clicks, click_times])
+        click_times = []  # Reset click times for the next round
+        total_clicks = 0
+        missed_clicks = 0
 
-#combination of every radius and every distance
 def update_combination():
     global current_radius_index, current_distance_index, current_radius, current_distance
 
     current_distance_index += 1
-    if current_distance_index >= len(distance):
+    if current_distance_index >= len(central_radii):
         current_distance_index = 0
         current_radius_index += 1
-        if current_radius_index >= len(radius):
+        if current_radius_index >= len(target_radii):
             current_radius_index = 0
 
-    current_radius = radius[current_radius_index]
-    current_distance = distance[current_distance_index]
+    current_radius = target_radii[current_radius_index]
+    current_distance = central_radii[current_distance_index]
     print(f"Updated combination to radius: {current_radius}, distance: {current_distance}")
 
 def restart_experiment():
@@ -218,18 +234,23 @@ def restart_experiment():
     last_clicked_index = None
     previous_index = None
 
+    # Reset the targets and their colors
     create_targets(current_radius, current_distance)
 
-    #first target
+    # Highlight the first target
     current_target_index = 0
     target_circles[current_target_index].color = highlight_color
 
+    # Set start time for the new experiment run
     start_time = time.time()
 
-#start timer when starting
+# Set start time before first click
 start_time = time.time()
 
 pyglet.app.run()
 
+# After the Pyglet event loop ends, close the CSV file
 csv_file.close()
 
+# Optionally, you can print a confirmation message or perform further analysis on the data
+print(f"Experiment data saved to {csv_filename}")
