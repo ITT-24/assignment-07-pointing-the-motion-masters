@@ -1,39 +1,57 @@
 import pyglet
 import math
 import time
+import json
+import random
+import sys
 
-#pyglet window
-window = pyglet.window.Window(1440, 960)
+#command line paramters
+if len(sys.argv) < 3:
+    print("Usage: python script_name.py <participant_id> <input_device>")
+    sys.exit(1)
+#parameters
+participant_id = sys.argv[1]
+input_device = sys.argv[2]
+
+#open config
+with open('config.json') as config_file:
+    config = json.load(config_file)
+
+# pyglet window
+window = pyglet.window.Window(config['window_width'], config['window_height'])
 batch = pyglet.graphics.Batch()
 
-#variables
+# variables
 targets = []
 click_times = []
 angles = []
 start_time = None
 trial_index = 0
-num_trials = 14
-    #number of circles need to be clicked
-num_targets = 12    #number of circles
+num_trials = config['num_trials']
+num_targets = config['num_targets']
+num_restarts = config['num_restarts']
+current_restart = 0 
 
-# Define target properties
-target_radius = 20
-central_radius = 150
+#target properties via config
+target_radius_min = config['target_radius_min']
+target_radius_max = config['target_radius_max']
+central_radius_min = config['central_radius_min']
+central_radius_max = config['central_radius_max']
 central_x = window.width // 2
 central_y = window.height // 2
-highlight_color = (0, 255, 0)  #highlight color
-normal_color = (255, 0, 0)     #color circle
+highlight_color = tuple(config['highlight_color'])
+normal_color = tuple(config['normal_color'])     
 
-#label on top
-label = pyglet.text.Label('Click on the highlighted target',
+#labeling rounds
+label = pyglet.text.Label('Round 1 of {}'.format(num_restarts + 1),
                           font_name='Times New Roman',
                           font_size=24,
-                          x=window.width // 2, y=window.height -30,
+                          x=window.width // 2, y=window.height - 30,
                           anchor_x='center', anchor_y='center')
 
-#circle positions in circle shape
-def generate_targets(num_targets):
-    global central_radius, target_radius, window
+# circle positions in circle
+def generate_targets(num_targets, central_radius, target_radius):
+    global central_x, central_y, normal_color, batch
     targets = []
     angle_step = 2 * math.pi / num_targets
     for i in range(num_targets):
@@ -43,16 +61,22 @@ def generate_targets(num_targets):
         targets.append((pyglet.shapes.Circle(x, y, target_radius, color=normal_color, batch=batch), angle))
     return targets
 
-#create targets
-targets = generate_targets(num_targets)
-target_circles = [t[0] for t in targets]
-angles = [t[1] for t in targets]
+def create_targets():
+    global targets, target_circles, angles
+    targets = generate_targets(num_targets, central_radius, target_radius)
+    target_circles = [t[0] for t in targets]
+    angles = [t[1] for t in targets]
 
-# Highlight the first target
+#random radius and distance
+central_radius = random.uniform(central_radius_min, central_radius_max)
+target_radius = random.uniform(target_radius_min, target_radius_max)
+create_targets()
+
+#first target
 current_target_index = 0
 target_circles[current_target_index].color = highlight_color
 
-# Track the last clicked target indices
+#last clicked
 last_clicked_index = None
 previous_index = None
 
@@ -60,16 +84,20 @@ previous_index = None
 def on_draw():
     window.clear()
     if trial_index < num_trials:
+        label.text = 'Round {} of {}'.format(current_restart + 1, num_restarts + 1)
         label.draw()
         batch.draw()
     else:
-        # Display results after all trials
-        result_label = pyglet.text.Label('Experiment Complete',
-                                         font_name='Times New Roman',
-                                         font_size=24,
-                                         x=window.width // 2, y=window.height // 2,
-                                         anchor_x='center', anchor_y='center')
-        result_label.draw()
+        if current_restart < num_restarts:
+            restart_experiment()
+        else:
+            # Display results after all trials and restarts
+            result_label = pyglet.text.Label('Experiment Complete',
+                                             font_name='Times New Roman',
+                                             font_size=24,
+                                             x=window.width // 2, y=window.height // 2,
+                                             anchor_x='center', anchor_y='center')
+            result_label.draw()
 
 @window.event
 def on_mouse_press(x, y, button, modifiers):
@@ -85,7 +113,7 @@ def on_mouse_press(x, y, button, modifiers):
             previous_index = last_clicked_index
             last_clicked_index = current_target_index
 
-            #next target
+            # Next target
             if previous_index is None:
                 next_target_index = (current_target_index + num_targets // 2) % num_targets
             else:
@@ -93,18 +121,39 @@ def on_mouse_press(x, y, button, modifiers):
                 if next_target_index == last_clicked_index:
                     next_target_index = (next_target_index - 1) % num_targets
 
-            #set color next target
+            # Set color next target
             target.color = normal_color
             current_target_index = next_target_index
             target_circles[current_target_index].color = highlight_color
             trial_index += 1
 
-            #set start time
+            # Set start time
             start_time = time.time()
 
-#set start time before first click
+def restart_experiment():
+    global trial_index, current_restart, current_target_index, last_clicked_index, previous_index, click_times, start_time, central_radius, target_radius
+
+    current_restart += 1
+    trial_index = 0
+    click_times = []
+    last_clicked_index = None
+    previous_index = None
+
+    #update radius and distance
+    central_radius = random.uniform(central_radius_min, central_radius_max)
+    target_radius = random.uniform(target_radius_min, target_radius_max)
+
+    #reset targets
+    create_targets()
+
+    #highlight first target
+    current_target_index = 0
+    target_circles[current_target_index].color = highlight_color
+
+    #set start time for new round
+    start_time = time.time()
+
+#first start time
 start_time = time.time()
 
 pyglet.app.run()
-
-
