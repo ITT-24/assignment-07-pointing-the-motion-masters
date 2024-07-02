@@ -5,7 +5,6 @@ import pyglet
 import math
 import time
 import json
-import random
 import sys
 import csv
 from collections import deque
